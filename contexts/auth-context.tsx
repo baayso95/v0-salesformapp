@@ -78,13 +78,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (storedUsers) {
       const parsedUsers = JSON.parse(storedUsers)
-      const migratedUsers = parsedUsers.map((user: any) => ({
-        ...user,
-        email: user.email || "email@example.com", // Added email migration for existing users
-        isActive: user.isActive !== undefined ? user.isActive : true,
-        twoFactorEnabled: user.twoFactorEnabled !== undefined ? user.twoFactorEnabled : false,
-      }))
+      const migratedUsers = parsedUsers.map((user: any) => {
+        // Fix the baayso user specifically
+        if (user.username === "baayso" && user.role === "baaysoce@gmail.com") {
+          return {
+            ...user,
+            role: "user", // Fix the role
+            email: "baaysoce@gmail.com", // Move email to correct field
+            isActive: user.isActive !== undefined ? user.isActive : true,
+            twoFactorEnabled: user.twoFactorEnabled !== undefined ? user.twoFactorEnabled : false,
+          }
+        }
+
+        // General migration for all users
+        return {
+          ...user,
+          email: user.email || "email@example.com",
+          role: user.role === "baaysoce@gmail.com" ? "user" : user.role, // Fix any other corrupted roles
+          isActive: user.isActive !== undefined ? user.isActive : true,
+          twoFactorEnabled: user.twoFactorEnabled !== undefined ? user.twoFactorEnabled : false,
+        }
+      })
       setUsers(migratedUsers)
+      localStorage.setItem("users", JSON.stringify(migratedUsers))
     }
 
     if (authStatus === "true" && storedUsername && storedUserRole) {
