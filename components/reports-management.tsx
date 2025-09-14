@@ -10,9 +10,10 @@ import { FileText, Calendar, TrendingUp, Trash2, Eye, BarChart3 } from "lucide-r
 interface ReportsManagementProps {
   reports: SalesReport[]
   onDelete: (reportId: string) => void
+  onGenerate: (periode: "journalier" | "mensuel" | "annuel") => void
 }
 
-export function ReportsManagement({ reports, onDelete }: ReportsManagementProps) {
+export function ReportsManagement({ reports, onDelete, onGenerate }: ReportsManagementProps) {
   const [selectedReport, setSelectedReport] = useState<SalesReport | null>(null)
 
   const getPeriodeBadge = (periode: string) => {
@@ -26,12 +27,6 @@ export function ReportsManagement({ reports, onDelete }: ReportsManagementProps)
       default:
         return <Badge className="bg-gray-100 text-gray-800">{periode}</Badge>
     }
-  }
-
-  const generateReport = (periode: "journalier" | "mensuel" | "annuel") => {
-    // Cette fonction sera appelée depuis le composant parent
-    // Pour l'instant, on affiche juste un message
-    alert(`Génération d'un rapport ${periode} en cours...`)
   }
 
   if (selectedReport) {
@@ -124,21 +119,21 @@ export function ReportsManagement({ reports, onDelete }: ReportsManagementProps)
         <h2 className="text-2xl font-bold">Gestion des Rapports</h2>
         <div className="flex flex-wrap gap-2">
           <Button
-            onClick={() => generateReport("journalier")}
+            onClick={() => onGenerate("journalier")}
             className="bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
           >
             <Calendar className="w-4 h-4 mr-2" />
             Rapport Journalier
           </Button>
           <Button
-            onClick={() => generateReport("mensuel")}
+            onClick={() => onGenerate("mensuel")}
             className="bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700"
           >
             <TrendingUp className="w-4 h-4 mr-2" />
             Rapport Mensuel
           </Button>
           <Button
-            onClick={() => generateReport("annuel")}
+            onClick={() => onGenerate("annuel")}
             className="bg-gradient-to-r from-purple-500 to-violet-600 hover:from-purple-600 hover:to-violet-700"
           >
             <BarChart3 className="w-4 h-4 mr-2" />

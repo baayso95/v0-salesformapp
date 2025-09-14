@@ -11,6 +11,7 @@ import { TrashManagement } from "@/components/trash-management"
 import { ExportData } from "@/components/export-data"
 import { ReportsManagement } from "@/components/reports-management"
 import { AdminManagement } from "@/components/admin-management"
+import { SalesPrint } from "@/components/sales-print"
 import { useAuth } from "@/contexts/auth-context"
 import { AuthGuard } from "@/components/auth-guard"
 import QRCode from "qrcode"
@@ -60,6 +61,7 @@ export interface SalesReport {
 export default function Home() {
   const { username, logout, isAdmin, isAuthenticated, isLoading, showWelcome, setShowWelcome } = useAuth()
 
+  const [activeTab, setActiveTab] = useState("create")
   const [sales, setSales] = useState<Sale[]>([])
   const [reports, setReports] = useState<SalesReport[]>([])
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null)
@@ -439,92 +441,13 @@ export default function Home() {
 
   if (showPrint && selectedSale) {
     return (
-      <div className="min-h-screen bg-white p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex justify-between items-center mb-8 no-print">
-            <h1 className="text-2xl font-bold">Fiche de Vente #{selectedSale.id.slice(-6)}</h1>
-            <div className="flex gap-2">
-              <Button onClick={() => window.print()} className="bg-blue-600 hover:bg-blue-700">
-                <Printer className="w-4 h-4 mr-2" />
-                Imprimer
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowPrint(false)
-                  setSelectedSale(null)
-                }}
-              >
-                Fermer
-              </Button>
-            </div>
-          </div>
-
-          <div className="bg-white border rounded-lg p-8 shadow-lg">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div>
-                <h3 className="font-semibold text-gray-800 mb-2">Informations Client</h3>
-                <p>
-                  <strong>Téléphone:</strong> {selectedSale.telephoneClient}
-                </p>
-                {selectedSale.telephoneClient2 && (
-                  <p>
-                    <strong>Téléphone 2:</strong> {selectedSale.telephoneClient2}
-                  </p>
-                )}
-                <p>
-                  <strong>Adresse de livraison:</strong> {selectedSale.adresseLivraison}
-                </p>
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-800 mb-2">Informations Vente</h3>
-                <p>
-                  <strong>Date de vente:</strong> {new Date(selectedSale.dateVente).toLocaleDateString("fr-FR")}
-                </p>
-                <p>
-                  <strong>Livreur:</strong> {selectedSale.livreur}
-                </p>
-                <p>
-                  <strong>Mode de paiement:</strong> {selectedSale.modePaiement}
-                </p>
-                {selectedSale.modePaiement2 && (
-                  <p>
-                    <strong>Mode de paiement 2:</strong> {selectedSale.modePaiement2}
-                  </p>
-                )}
-                <p>
-                  <strong>Statut:</strong> {selectedSale.status || "active"}
-                </p>
-                <p>
-                  <strong>Validée:</strong> {selectedSale.isValidated ? "Oui" : "Non"}
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <h3 className="font-semibold text-gray-800 mb-4">Produits</h3>
-              <div className="space-y-2">
-                {selectedSale.produits.map((produit, index) => (
-                  <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                    <span>{produit.nom}</span>
-                    <span>
-                      Quantité: {produit.quantite} {produit.unite} × {produit.prixUnitaire.toLocaleString()} F CFA ={" "}
-                      {(produit.quantite * produit.prixUnitaire).toLocaleString()} F CFA
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 p-4 bg-green-50 rounded-lg">
-                <p className="text-lg font-bold text-green-800">
-                  Total:{" "}
-                  {selectedSale.produits.reduce((sum, p) => sum + p.quantite * p.prixUnitaire, 0).toLocaleString()} F
-                  CFA
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SalesPrint
+        sale={selectedSale}
+        onClose={() => {
+          setShowPrint(false)
+          setSelectedSale(null)
+        }}
+      />
     )
   }
 
@@ -703,7 +626,7 @@ export default function Home() {
           </div>
         </div>
 
-        <Tabs defaultValue="create" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex justify-center gap-4 mb-8 p-4">
             <TabsList className="flex gap-3 bg-transparent p-0 h-auto">
               <TabsTrigger
@@ -864,7 +787,7 @@ export default function Home() {
 
           {isAdmin && (
             <TabsContent value="reports">
-              <ReportsManagement reports={reports} onDelete={deleteReport} />
+              <ReportsManagement reports={reports} onDelete={deleteReport} onGenerate={generateReport} />
             </TabsContent>
           )}
 
