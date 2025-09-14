@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@custom-variant dark (&:is(.dark *));
+
 @theme inline {
   --font-sans: var(--font-inter);
   --font-serif: var(--font-playfair-display);
