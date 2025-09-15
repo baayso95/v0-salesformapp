@@ -425,7 +425,8 @@ export function StockManagement() {
                         Base
                       </Button>
                       <Button size="sm" variant="destructive" onClick={() => handleDeleteItem(item.id)}>
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="w-3 h-3 mr-1" />
+                        Supprimer
                       </Button>
                     </div>
                   </CardContent>

@@ -467,6 +467,7 @@ export function AdminManagement() {
                         size="sm"
                         onClick={() => togglePasswordVisibility(user.id)}
                         className="h-6 w-6 p-0"
+                        title={showPassword[user.id] ? "Masquer mot de passe" : "Afficher mot de passe"}
                       >
                         {showPassword[user.id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                       </Button>
@@ -506,8 +507,10 @@ export function AdminManagement() {
                         ? "text-orange-600 border-orange-300 hover:bg-orange-50"
                         : "text-gray-600 border-gray-300 hover:bg-gray-50"
                     }
+                    title={user.twoFactorEnabled ? "Désactiver 2FA" : "Activer 2FA"}
                   >
-                    <Smartphone className="w-4 h-4" />
+                    <Smartphone className="w-4 h-4 mr-1" />
+                    {user.twoFactorEnabled ? "Désactiver 2FA" : "Activer 2FA"}
                   </Button>
                   <Button
                     variant="outline"
@@ -519,16 +522,20 @@ export function AdminManagement() {
                         : "text-green-600 border-green-300 hover:bg-green-50"
                     }
                     disabled={user.username === currentUsername && user.isActive}
+                    title={user.isActive ? "Désactiver utilisateur" : "Activer utilisateur"}
                   >
-                    {user.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                    {user.isActive ? <UserX className="w-4 h-4 mr-1" /> : <UserCheck className="w-4 h-4 mr-1" />}
+                    {user.isActive ? "Désactiver" : "Activer"}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => startEdit(user)}
                     className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                    title="Modifier utilisateur"
                   >
-                    <Edit className="w-4 h-4" />
+                    <Edit className="w-4 h-4 mr-1" />
+                    Modifier
                   </Button>
                   <Button
                     variant="outline"
@@ -536,8 +543,10 @@ export function AdminManagement() {
                     onClick={() => handleDeleteUser(user.id, user.username)}
                     className="text-red-600 border-red-300 hover:bg-red-50"
                     disabled={user.username === currentUsername}
+                    title="Supprimer utilisateur"
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4 mr-1" />
+                    Supprimer
                   </Button>
                 </div>
               </div>
@@ -587,6 +596,7 @@ export function AdminManagement() {
                           size="sm"
                           onClick={() => togglePasswordVisibility(user.id)}
                           className="h-6 w-6 p-0"
+                          title={showPassword[user.id] ? "Masquer mot de passe" : "Afficher mot de passe"}
                         >
                           {showPassword[user.id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
                         </Button>
@@ -621,8 +631,10 @@ export function AdminManagement() {
                           ? "text-orange-600 border-orange-300 hover:bg-orange-50"
                           : "text-gray-600 border-gray-300 hover:bg-gray-50"
                       }
+                      title={user.twoFactorEnabled ? "Désactiver 2FA" : "Activer 2FA"}
                     >
-                      <Smartphone className="w-4 h-4" />
+                      <Smartphone className="w-4 h-4 mr-1" />
+                      {user.twoFactorEnabled ? "Désactiver 2FA" : "Activer 2FA"}
                     </Button>
                     <Button
                       variant="outline"
@@ -633,24 +645,31 @@ export function AdminManagement() {
                           ? "text-red-600 border-red-300 hover:bg-red-50"
                           : "text-green-600 border-green-300 hover:bg-green-50"
                       }
+                      title={user.isActive ? "Désactiver utilisateur" : "Activer utilisateur"}
                     >
-                      {user.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+                      {user.isActive ? <UserX className="w-4 h-4 mr-1" /> : <UserCheck className="w-4 h-4 mr-1" />}
+                      {user.isActive ? "Désactiver" : "Activer"}
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => startEdit(user)}
                       className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                      title="Modifier utilisateur"
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="w-4 h-4 mr-1" />
+                      Modifier
                     </Button>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handleDeleteUser(user.id, user.username)}
                       className="text-red-600 border-red-300 hover:bg-red-50"
+                      disabled={user.username === currentUsername}
+                      title="Supprimer utilisateur"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Supprimer
                     </Button>
                   </div>
                 </div>

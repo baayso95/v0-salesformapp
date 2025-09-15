@@ -170,7 +170,8 @@ export function SalesDatabase({
                       onClick={() => onView(sale)}
                       className="text-blue-600 border-blue-300 hover:bg-blue-50"
                     >
-                      <Eye className="w-4 h-4" />
+                      <Eye className="w-4 h-4 mr-1" />
+                      Voir
                     </Button>
                     <Button
                       variant="outline"
@@ -178,7 +179,8 @@ export function SalesDatabase({
                       onClick={() => onEdit(sale)}
                       className="text-green-600 border-green-300 hover:bg-green-50"
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="w-4 h-4 mr-1" />
+                      Modifier
                     </Button>
                     <Button
                       variant="outline"
@@ -186,7 +188,8 @@ export function SalesDatabase({
                       onClick={() => onPrint(sale)}
                       className="text-purple-600 border-purple-300 hover:bg-purple-50"
                     >
-                      <Printer className="w-4 h-4" />
+                      <Printer className="w-4 h-4 mr-1" />
+                      Imprimer
                     </Button>
 
                     {(!sale.status || sale.status === "active") && (
@@ -197,7 +200,8 @@ export function SalesDatabase({
                           onClick={() => onPutOnHold(sale.id)}
                           className="text-blue-600 border-blue-300 hover:bg-blue-50"
                         >
-                          <Clock className="w-4 h-4" />
+                          <Clock className="w-4 h-4 mr-1" />
+                          En attente
                         </Button>
                         <Button
                           variant="outline"
@@ -205,7 +209,8 @@ export function SalesDatabase({
                           onClick={() => onCancel(sale.id)}
                           className="text-orange-600 border-orange-300 hover:bg-orange-50"
                         >
-                          <XCircle className="w-4 h-4" />
+                          <XCircle className="w-4 h-4 mr-1" />
+                          Annuler
                         </Button>
                         <Button
                           variant="outline"
@@ -213,7 +218,8 @@ export function SalesDatabase({
                           onClick={() => onRefund(sale.id)}
                           className="text-yellow-600 border-yellow-300 hover:bg-yellow-50"
                         >
-                          <RefreshCw className="w-4 h-4" />
+                          <RefreshCw className="w-4 h-4 mr-1" />
+                          Rembourser
                         </Button>
                       </>
                     )}
@@ -225,7 +231,8 @@ export function SalesDatabase({
                         onClick={() => onValidate(sale.id)}
                         className="text-green-600 border-green-300 hover:bg-green-50"
                       >
-                        <CheckCircle className="w-4 h-4" />
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Valider
                       </Button>
                     )}
 
@@ -235,7 +242,8 @@ export function SalesDatabase({
                       onClick={() => onDelete(sale.id)}
                       className="text-red-600 border-red-300 hover:bg-red-50"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Supprimer
                     </Button>
                   </div>
                 </div>

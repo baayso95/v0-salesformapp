@@ -806,7 +806,7 @@ export default function Home() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-6">
-                <TrashManagement onRestoreSale={restoreSaleFromTrash} isAdmin={isAdmin} />
+                <TrashManagement onRestoreSale={restoreSaleFromTrash} onSwitchTab={setActiveTab} isAdmin={isAdmin} />
               </CardContent>
             </Card>
           </TabsContent>

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Trash2, Download, RotateCcw, AlertTriangle, Package } from "lucide-react"
+import { Trash2, Download, AlertTriangle, Package } from "lucide-react"
 import type { Sale } from "@/app/page"
 
 interface TrashedStockItem {
@@ -20,10 +20,11 @@ interface TrashedStockItem {
 
 interface TrashManagementProps {
   onRestoreSale: (sale: Sale) => void
+  onSwitchTab?: (tab: string) => void // Added prop to switch tabs after restoration
   isAdmin?: boolean
 }
 
-export function TrashManagement({ onRestoreSale, isAdmin = false }: TrashManagementProps) {
+export function TrashManagement({ onRestoreSale, onSwitchTab, isAdmin = false }: TrashManagementProps) {
   const [trashedSales, setTrashedSales] = useState<Sale[]>([])
   const [trashedStockItems, setTrashedStockItems] = useState<TrashedStockItem[]>([])
 
@@ -206,6 +207,10 @@ export function TrashManagement({ onRestoreSale, isAdmin = false }: TrashManagem
     // Trigger stock update event
     window.dispatchEvent(new Event("stockUpdated"))
 
+    if (onSwitchTab) {
+      onSwitchTab("stock")
+    }
+
     // Show success message with custom alert
     const alertEvent = new CustomEvent("showAlert", {
       detail: {
@@ -223,6 +228,11 @@ export function TrashManagement({ onRestoreSale, isAdmin = false }: TrashManagem
       setTrashedSales((prev) => prev.filter((s) => s.id !== sale.id))
       // Restore to main sales list
       onRestoreSale(sale)
+
+      if (onSwitchTab) {
+        onSwitchTab("database")
+      }
+
       alert("La fiche de vente a été restaurée avec succès.")
     }
   }
@@ -321,16 +331,6 @@ export function TrashManagement({ onRestoreSale, isAdmin = false }: TrashManagem
                             Date de vente: {new Date(sale.dateVente).toLocaleDateString("fr-FR")}
                           </p>
                         </div>
-                        {isAdmin && (
-                          <Button
-                            onClick={() => restoreSale(sale)}
-                            size="sm"
-                            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold shadow-md transform hover:scale-105 transition-all duration-200"
-                          >
-                            <RotateCcw className="w-4 h-4 mr-2" />
-                            Restaurer
-                          </Button>
-                        )}
                       </div>
                     </CardHeader>
                     <CardContent>
@@ -404,16 +404,6 @@ export function TrashManagement({ onRestoreSale, isAdmin = false }: TrashManagem
                           <Package className="w-5 h-5" />
                           {item.nom}
                         </CardTitle>
-                        {isAdmin && (
-                          <Button
-                            onClick={() => restoreStockItem(item)}
-                            size="sm"
-                            className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold shadow-md transform hover:scale-105 transition-all duration-200"
-                          >
-                            <RotateCcw className="w-4 h-4 mr-2" />
-                            Restaurer
-                          </Button>
-                        )}
                       </div>
                       <p className="text-sm text-purple-600">
                         Supprimé le: {new Date(item.deletedAt).toLocaleDateString("fr-FR")}
