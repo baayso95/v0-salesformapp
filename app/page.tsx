@@ -361,6 +361,8 @@ export default function Home() {
       }
 
       console.log("[v0] Sale added to Supabase successfully")
+
+      await loadData(supabase, setSales, setStock, stockManager, setReports)
     } catch (error) {
       console.error("Error in addSale:", error)
       throw error
@@ -505,6 +507,8 @@ export default function Home() {
       }
 
       console.log("[v0] Sale updated successfully")
+
+      await loadData(supabase, setSales, setStock, stockManager, setReports)
     } catch (error) {
       console.error("Error in updateSale:", error)
       throw error
