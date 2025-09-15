@@ -115,7 +115,6 @@ const loadData = async (supabase, setSales, setStock, stockManager, setReports) 
     }))
 
     setStock(transformedStock)
-    stockManager.setStock(transformedStock)
     console.log(`[v0] Loaded ${transformedStock.length} stock items from Supabase`)
 
     // Keep localStorage as backup
@@ -127,8 +126,22 @@ const loadData = async (supabase, setSales, setStock, stockManager, setReports) 
       setReports(JSON.parse(savedReports))
     }
   } catch (error) {
-    console.error("[v0] Error in loadData:", error)
-    throw error
+    console.error("[v0] Error in loadData:", error.message)
+
+    // Fallback to localStorage
+    const savedSales = localStorage.getItem("sales-data")
+    const savedStock = localStorage.getItem("stock-data")
+    const savedReports = localStorage.getItem("reports-data")
+
+    if (savedSales) {
+      setSales(JSON.parse(savedSales))
+    }
+    if (savedStock) {
+      setStock(JSON.parse(savedStock))
+    }
+    if (savedReports) {
+      setReports(JSON.parse(savedReports))
+    }
   }
 }
 
