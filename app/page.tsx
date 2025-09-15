@@ -59,89 +59,125 @@ export interface SalesReport {
   totalVentesRemboursees?: number
 }
 
-const loadData = async (supabase, setSales, setStock, stockManager, setReports) => {
+export interface StockItem {
+  id: string
+  nom: string
+  quantite: number
+  prixUnitaire: number
+}
+
+const loadData = async (
+  supabase: any,
+  setSales: (sales: Sale[]) => void,
+  setStock: (stock: StockItem[]) => void,
+  stockManager: any,
+  setReports: (reports: any[]) => void,
+) => {
   try {
     console.log("[v0] Starting data migration to Supabase...")
 
-    // First, try to migrate localStorage data to Supabase
-    await migrateLocalStorageToSupabase(supabase)
+    // Check if migration has already been done
+    const migrationKey = "supabase_migration_completed"
+    const migrationCompleted = localStorage.getItem(migrationKey)
+
+    if (!migrationCompleted) {
+      // Migrate existing localStorage data to Supabase
+      const existingSales = JSON.parse(localStorage.getItem("sales") || "[]")
+      const existingStock = JSON.parse(localStorage.getItem("stock") || "[]")
+
+      // Migrate sales
+      for (const sale of existingSales) {
+        const { error } = await supabase.from("sales").insert({
+          client_name: sale.telephoneClient || "Client inconnu",
+          product_name: sale.produits?.[0]?.nom || "Produit inconnu",
+          quantity: sale.produits?.reduce((sum: number, p: any) => sum + p.quantite, 0) || 1,
+          unit_price: sale.produits?.[0]?.prixUnitaire || 0,
+          total_price: sale.produits?.reduce((sum: number, p: any) => sum + p.quantite * p.prixUnitaire, 0) || 0,
+          status: "active",
+          sale_date: sale.createdAt || new Date().toISOString(),
+        })
+
+        if (error) {
+          console.error("Error migrating sale:", error)
+        }
+      }
+
+      // Migrate stock
+      for (const item of existingStock) {
+        const { error } = await supabase.from("stock").insert({
+          product_name: item.nom,
+          quantity: item.quantite,
+          unit_price: item.prixUnitaire,
+        })
+
+        if (error) {
+          console.error("Error migrating stock:", error)
+        }
+      }
+
+      localStorage.setItem(migrationKey, "true")
+      console.log("[v0] Migration completed successfully")
+    } else {
+      console.log("[v0] Migration already completed, skipping...")
+    }
 
     // Load sales from Supabase
     const { data: salesData, error: salesError } = await supabase
       .from("sales")
       .select("*")
-      .neq("status", "deleted")
       .order("created_at", { ascending: false })
 
     if (salesError) {
-      console.error("[v0] Error loading sales from Supabase:", salesError)
+      console.error("Error loading sales:", salesError)
       throw salesError
     }
 
-    const transformedSales = salesData.map((sale) => ({
+    // Transform Supabase data to match local format
+    const transformedSales = salesData.map((sale: any) => ({
       id: sale.id,
-      dateVente: sale.created_at.split("T")[0],
-      telephoneClient: sale.client_phone || "",
+      telephoneClient: sale.client_name,
       telephoneClient2: "",
-      adresseLivraison: sale.client_address || "",
-      produits: sale.products || [],
+      adresseLivraison: "",
+      produits: [
+        {
+          nom: sale.product_name,
+          quantite: sale.quantity,
+          prixUnitaire: sale.unit_price,
+        },
+      ],
       livreur: "",
-      modePaiement: "LIQUIDE" as const,
-      modePaiement2: undefined,
+      dateVente: sale.sale_date ? sale.sale_date.split("T")[0] : new Date().toISOString().split("T")[0],
       createdAt: sale.created_at,
-      status: sale.status as any,
-      isValidated: sale.status === "active",
+      status: sale.status,
     }))
 
     setSales(transformedSales)
     console.log(`[v0] Loaded ${transformedSales.length} sales from Supabase`)
 
     // Load stock from Supabase
-    const { data: stockData, error: stockError } = await supabase
-      .from("stock")
-      .select("*")
-      .order("created_at", { ascending: false })
+    const { data: stockData, error: stockError } = await supabase.from("stock").select("*")
 
     if (stockError) {
-      console.error("[v0] Error loading stock from Supabase:", stockError)
+      console.error("Error loading stock:", stockError)
       throw stockError
     }
 
-    const transformedStock = stockData.map((item) => ({
+    const transformedStock = stockData.map((item: any) => ({
       id: item.id,
       nom: item.product_name,
       quantite: item.quantity,
-      prixUnitaire: Number.parseFloat(item.unit_price.toString()),
+      prixUnitaire: item.unit_price,
     }))
 
     setStock(transformedStock)
     console.log(`[v0] Loaded ${transformedStock.length} stock items from Supabase`)
-
-    // Keep localStorage as backup
-    localStorage.setItem("sales-data", JSON.stringify(transformedSales))
-    localStorage.setItem("stock-data", JSON.stringify(transformedStock))
-
-    const savedReports = localStorage.getItem("reports-data")
-    if (savedReports) {
-      setReports(JSON.parse(savedReports))
-    }
   } catch (error) {
-    console.error("[v0] Error in loadData:", error.message)
-
-    // Fallback to localStorage
-    const savedSales = localStorage.getItem("sales-data")
-    const savedStock = localStorage.getItem("stock-data")
-    const savedReports = localStorage.getItem("reports-data")
-
-    if (savedSales) {
-      setSales(JSON.parse(savedSales))
-    }
-    if (savedStock) {
-      setStock(JSON.parse(savedStock))
-    }
-    if (savedReports) {
-      setReports(JSON.parse(savedReports))
-    }
+    console.error("[v0] Error in loadData:", error)
+    // Fallback to localStorage if Supabase fails
+    const localSales = JSON.parse(localStorage.getItem("sales") || "[]")
+    const localStock = JSON.parse(localStorage.getItem("stock") || "[]")
+    setSales(localSales)
+    setStock(localStock)
   }
 }
 
@@ -270,50 +306,91 @@ export default function Home() {
   }, [supabase])
 
   useEffect(() => {
-    const channel = supabase
+    if (!supabase) return
+
+    const salesChannel = supabase
       .channel("sales-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, (payload) => {
-        console.log("[v0] Real-time update received:", payload)
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, (payload: any) => {
+        console.log("[v0] Sales change detected:", payload)
+
         if (payload.eventType === "INSERT") {
           const newSale = {
             id: payload.new.id,
-            dateVente: payload.new.created_at.split("T")[0],
-            telephoneClient: payload.new.client_phone || "",
+            telephoneClient: payload.new.client_name || "",
             telephoneClient2: "",
-            adresseLivraison: payload.new.client_address || "",
-            produits: payload.new.products || [],
+            adresseLivraison: "",
+            produits: [
+              {
+                nom: payload.new.product_name || "",
+                quantite: payload.new.quantity || 1,
+                prixUnitaire: payload.new.unit_price || 0,
+              },
+            ],
             livreur: "",
-            modePaiement: "LIQUIDE" as const,
-            modePaiement2: undefined,
+            dateVente: payload.new.sale_date
+              ? payload.new.sale_date.split("T")[0]
+              : new Date().toISOString().split("T")[0],
             createdAt: payload.new.created_at,
-            status: payload.new.status as any,
-            isValidated: payload.new.status === "active",
+            status: payload.new.status || "active",
           }
-          setSales((prev) => [newSale, ...prev.filter((s) => s.id !== newSale.id)])
+          setSales((prev) => [newSale, ...prev])
         } else if (payload.eventType === "UPDATE") {
           const updatedSale = {
             id: payload.new.id,
-            dateVente: payload.new.created_at.split("T")[0],
-            telephoneClient: payload.new.client_phone || "",
+            telephoneClient: payload.new.client_name || "",
             telephoneClient2: "",
-            adresseLivraison: payload.new.client_address || "",
-            produits: payload.new.products || [],
+            adresseLivraison: "",
+            produits: [
+              {
+                nom: payload.new.product_name || "",
+                quantite: payload.new.quantity || 1,
+                prixUnitaire: payload.new.unit_price || 0,
+              },
+            ],
             livreur: "",
-            modePaiement: "LIQUIDE" as const,
-            modePaiement2: undefined,
+            dateVente: payload.new.sale_date
+              ? payload.new.sale_date.split("T")[0]
+              : new Date().toISOString().split("T")[0],
             createdAt: payload.new.created_at,
-            status: payload.new.status as any,
-            isValidated: payload.new.status === "active",
+            status: payload.new.status || "active",
           }
-          setSales((prev) => prev.map((s) => (s.id === updatedSale.id ? updatedSale : s)))
+          setSales((prev) => prev.map((sale) => (sale.id === payload.new.id ? updatedSale : sale)))
         } else if (payload.eventType === "DELETE") {
-          setSales((prev) => prev.filter((s) => s.id !== payload.old.id))
+          setSales((prev) => prev.filter((sale) => sale.id !== payload.old.id))
+        }
+      })
+      .subscribe()
+
+    const stockChannel = supabase
+      .channel("stock-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "stock" }, (payload: any) => {
+        console.log("[v0] Stock change detected:", payload)
+
+        if (payload.eventType === "INSERT") {
+          const newStock = {
+            id: payload.new.id,
+            nom: payload.new.product_name,
+            quantite: payload.new.quantity,
+            prixUnitaire: payload.new.unit_price,
+          }
+          setStock((prev) => [...prev, newStock])
+        } else if (payload.eventType === "UPDATE") {
+          const updatedStock = {
+            id: payload.new.id,
+            nom: payload.new.product_name,
+            quantite: payload.new.quantity,
+            prixUnitaire: payload.new.unit_price,
+          }
+          setStock((prev) => prev.map((item) => (item.id === payload.new.id ? updatedStock : item)))
+        } else if (payload.eventType === "DELETE") {
+          setStock((prev) => prev.filter((item) => item.id !== payload.old.id))
         }
       })
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      salesChannel.unsubscribe()
+      stockChannel.unsubscribe()
     }
   }, [supabase])
 
@@ -358,12 +435,13 @@ export default function Home() {
       const { data, error } = await supabase
         .from("sales")
         .insert({
-          client_name: saleData.telephoneClient,
-          client_phone: saleData.telephoneClient,
-          client_address: saleData.adresseLivraison,
-          products: saleData.produits,
-          total_amount: saleData.produits.reduce((sum, p) => sum + p.quantite * p.prixUnitaire, 0),
+          client_name: saleData.telephoneClient || "Client inconnu",
+          product_name: saleData.produits?.[0]?.nom || "Produit inconnu",
+          quantity: saleData.produits?.reduce((sum, p) => sum + p.quantite, 0) || 1,
+          unit_price: saleData.produits?.[0]?.prixUnitaire || 0,
+          total_price: saleData.produits?.reduce((sum, p) => sum + p.quantite * p.prixUnitaire, 0) || 0,
           status: "active",
+          sale_date: new Date().toISOString(),
         })
         .select()
         .single()
@@ -500,35 +578,32 @@ export default function Home() {
     setShowEditModal(true)
   }
 
-  const updateSale = async (updatedSale: Sale) => {
+  const updateSale = async (id: string, updatedSale: Sale) => {
     try {
       const { error } = await supabase
         .from("sales")
         .update({
-          client_name: updatedSale.telephoneClient,
-          client_phone: updatedSale.telephoneClient,
-          client_address: updatedSale.adresseLivraison,
-          products: updatedSale.produits,
-          total_amount: updatedSale.produits.reduce((sum, p) => sum + p.quantite * p.prixUnitaire, 0),
-          status: updatedSale.status,
+          client_name: updatedSale.telephoneClient || "Client inconnu",
+          product_name: updatedSale.produits?.[0]?.nom || "Produit inconnu",
+          quantity: updatedSale.produits?.reduce((sum, p) => sum + p.quantite, 0) || 1,
+          unit_price: updatedSale.produits?.[0]?.prixUnitaire || 0,
+          total_price: updatedSale.produits?.reduce((sum, p) => sum + p.quantite * p.prixUnitaire, 0) || 0,
+          status: updatedSale.status || "active",
+          sale_date: updatedSale.dateVente || new Date().toISOString().split("T")[0],
         })
-        .eq("id", updatedSale.id)
+        .eq("id", id)
 
       if (error) {
-        console.error("Error updating sale:", error)
+        console.error("Error updating sale in Supabase:", error)
         throw error
       }
 
-      console.log("[v0] Sale updated successfully")
-
+      console.log("[v0] Sale updated in Supabase successfully")
       await loadData(supabase, setSales, setStock, stockManager, setReports)
     } catch (error) {
       console.error("Error in updateSale:", error)
       throw error
     }
-
-    setShowEditModal(false)
-    setSelectedSale(null)
   }
 
   const generateReport = (periode: "journalier" | "mensuel" | "annuel") => {
@@ -919,7 +994,7 @@ export default function Home() {
                     status: selectedSale.status,
                     isValidated: selectedSale.isValidated,
                   }
-                  updateSale(updatedSale)
+                  updateSale(selectedSale.id, updatedSale)
                 }}
                 isEditing={true}
                 onValidate={validateSale}
