@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
 import type { Sale } from "@/app/page"
-import { Search, Eye, Edit, Printer, Trash2, XCircle, RefreshCw, Clock, CheckCircle } from "lucide-react"
+import { Search, Eye, Edit, Printer, CheckCircle } from "lucide-react"
 
 interface SalesDatabaseProps {
   sales: Sale[]
@@ -34,7 +34,9 @@ export function SalesDatabase({
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "cancelled" | "refunded" | "pending">("all")
 
-  const filteredSales = sales.filter((sale) => {
+  const activeSales = sales.filter((sale) => sale.status !== "deleted")
+
+  const filteredSales = activeSales.filter((sale) => {
     const matchesSearch =
       sale.telephoneClient.toLowerCase().includes(searchTerm.toLowerCase()) ||
       sale.adresseLivraison.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -70,6 +72,10 @@ export function SalesDatabase({
     return sale.produits.reduce((sum, product) => sum + product.quantite * product.prixUnitaire, 0)
   }
 
+  const activateSale = (saleId: string) => {
+    onValidate(saleId)
+  }
+
   return (
     <div className="space-y-6">
       {/* Search and Filter */}
@@ -91,28 +97,28 @@ export function SalesDatabase({
             onClick={() => setStatusFilter("all")}
             size="sm"
           >
-            Tous ({sales.length})
+            Tous ({activeSales.length})
           </Button>
           <Button
             variant={statusFilter === "active" ? "default" : "outline"}
             onClick={() => setStatusFilter("active")}
             size="sm"
           >
-            Actifs ({sales.filter((s) => !s.status || s.status === "active").length})
+            Actifs ({activeSales.filter((s) => !s.status || s.status === "active").length})
           </Button>
           <Button
             variant={statusFilter === "pending" ? "default" : "outline"}
             onClick={() => setStatusFilter("pending")}
             size="sm"
           >
-            En attente ({sales.filter((s) => s.status === "pending").length})
+            En attente ({activeSales.filter((s) => s.status === "pending").length})
           </Button>
           <Button
             variant={statusFilter === "cancelled" ? "default" : "outline"}
             onClick={() => setStatusFilter("cancelled")}
             size="sm"
           >
-            Annulés ({sales.filter((s) => s.status === "cancelled").length})
+            Annulés ({activeSales.filter((s) => s.status === "cancelled").length})
           </Button>
         </div>
       </div>
@@ -176,15 +182,6 @@ export function SalesDatabase({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => onEdit(sale)}
-                      className="text-green-600 border-green-300 hover:bg-green-50"
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      Modifier
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
                       onClick={() => onPrint(sale)}
                       className="text-purple-600 border-purple-300 hover:bg-purple-50"
                     >
@@ -193,58 +190,40 @@ export function SalesDatabase({
                     </Button>
 
                     {(!sale.status || sale.status === "active") && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onPutOnHold(sale.id)}
-                          className="text-blue-600 border-blue-300 hover:bg-blue-50"
-                        >
-                          <Clock className="w-4 h-4 mr-1" />
-                          En attente
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onCancel(sale.id)}
-                          className="text-orange-600 border-orange-300 hover:bg-orange-50"
-                        >
-                          <XCircle className="w-4 h-4 mr-1" />
-                          Annuler
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => onRefund(sale.id)}
-                          className="text-yellow-600 border-yellow-300 hover:bg-yellow-50"
-                        >
-                          <RefreshCw className="w-4 h-4 mr-1" />
-                          Rembourser
-                        </Button>
-                      </>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onEdit(sale)}
+                        className="text-green-600 border-green-300 hover:bg-green-50"
+                      >
+                        <Edit className="w-4 h-4 mr-1" />
+                        Modifier
+                      </Button>
                     )}
 
                     {sale.status === "pending" && !sale.isValidated && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => onValidate(sale.id)}
+                        onClick={() => activateSale(sale.id)}
                         className="text-green-600 border-green-300 hover:bg-green-50"
                       >
                         <CheckCircle className="w-4 h-4 mr-1" />
-                        Valider
+                        Actif
                       </Button>
                     )}
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onDelete(sale.id)}
-                      className="text-red-600 border-red-300 hover:bg-red-50"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" />
-                      Supprimer
-                    </Button>
+                    {(!sale.status || sale.status === "active") && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onRefund(sale.id)}
+                        className="text-yellow-600 border-yellow-300 hover:bg-yellow-50"
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Rembourser
+                      </Button>
+                    )}
                   </div>
                 </div>
               </CardContent>

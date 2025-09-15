@@ -18,6 +18,7 @@ import QRCode from "qrcode"
 import StockManager from "@/lib/stock-manager"
 import { FileText, Database, Printer, Package, Trash2, Settings } from "lucide-react"
 import { WelcomeDialog } from "@/components/welcome-dialog"
+import { createClient } from "@/lib/supabase/client"
 
 export interface Product {
   nom: string
@@ -38,7 +39,7 @@ export interface Sale {
   modePaiement: "ORANGE" | "WAVE" | "LIQUIDE"
   modePaiement2?: "ORANGE" | "WAVE" | "LIQUIDE"
   createdAt: string
-  status?: "active" | "cancelled" | "refunded" | "pending"
+  status?: "active" | "cancelled" | "refunded" | "pending" | "deleted"
   isValidated?: boolean
 }
 
@@ -58,6 +59,143 @@ export interface SalesReport {
   totalVentesRemboursees?: number
 }
 
+const loadData = async (supabase, setSales, setStock, stockManager, setReports) => {
+  try {
+    console.log("[v0] Starting data migration to Supabase...")
+
+    // First, try to migrate localStorage data to Supabase
+    await migrateLocalStorageToSupabase(supabase)
+
+    // Load sales from Supabase
+    const { data: salesData, error: salesError } = await supabase
+      .from("sales")
+      .select("*")
+      .neq("status", "deleted")
+      .order("created_at", { ascending: false })
+
+    if (salesError) {
+      console.error("[v0] Error loading sales from Supabase:", salesError)
+      throw salesError
+    }
+
+    const transformedSales = salesData.map((sale) => ({
+      id: sale.id,
+      dateVente: sale.created_at.split("T")[0],
+      telephoneClient: sale.client_phone || "",
+      telephoneClient2: "",
+      adresseLivraison: sale.client_address || "",
+      produits: sale.products || [],
+      livreur: "",
+      modePaiement: "LIQUIDE" as const,
+      modePaiement2: undefined,
+      createdAt: sale.created_at,
+      status: sale.status as any,
+      isValidated: sale.status === "active",
+    }))
+
+    setSales(transformedSales)
+    console.log(`[v0] Loaded ${transformedSales.length} sales from Supabase`)
+
+    // Load stock from Supabase
+    const { data: stockData, error: stockError } = await supabase
+      .from("stock")
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    if (stockError) {
+      console.error("[v0] Error loading stock from Supabase:", stockError)
+      throw stockError
+    }
+
+    const transformedStock = stockData.map((item) => ({
+      id: item.id,
+      nom: item.product_name,
+      quantite: item.quantity,
+      prixUnitaire: Number.parseFloat(item.unit_price.toString()),
+    }))
+
+    setStock(transformedStock)
+    stockManager.setStock(transformedStock)
+    console.log(`[v0] Loaded ${transformedStock.length} stock items from Supabase`)
+
+    // Keep localStorage as backup
+    localStorage.setItem("sales-data", JSON.stringify(transformedSales))
+    localStorage.setItem("stock-data", JSON.stringify(transformedStock))
+
+    const savedReports = localStorage.getItem("reports-data")
+    if (savedReports) {
+      setReports(JSON.parse(savedReports))
+    }
+  } catch (error) {
+    console.error("[v0] Error in loadData:", error)
+    throw error
+  }
+}
+
+const migrateLocalStorageToSupabase = async (supabase) => {
+  try {
+    // Check if migration has already been done
+    const migrationKey = "supabase_migration_completed"
+    if (localStorage.getItem(migrationKey)) {
+      console.log("[v0] Migration already completed, skipping...")
+      return
+    }
+
+    console.log("[v0] Starting migration from localStorage to Supabase...")
+
+    // Migrate sales data
+    const savedSales = localStorage.getItem("sales-data")
+    if (savedSales) {
+      const salesData = JSON.parse(savedSales)
+      console.log(`[v0] Migrating ${salesData.length} sales to Supabase...`)
+
+      for (const sale of salesData) {
+        const { error } = await supabase.from("sales").upsert({
+          id: sale.id,
+          client_name: sale.telephoneClient,
+          client_phone: sale.telephoneClient,
+          client_address: sale.adresseLivraison,
+          products: sale.produits,
+          total_amount: sale.produits.reduce((sum, p) => sum + p.quantite * p.prixUnitaire, 0),
+          status: sale.status || "active",
+          created_at: sale.createdAt || new Date().toISOString(),
+        })
+
+        if (error) {
+          console.error(`[v0] Error migrating sale ${sale.id}:`, error)
+        }
+      }
+    }
+
+    // Migrate stock data
+    const savedStock = localStorage.getItem("stock-data")
+    if (savedStock) {
+      const stockData = JSON.parse(savedStock)
+      console.log(`[v0] Migrating ${stockData.length} stock items to Supabase...`)
+
+      for (const item of stockData) {
+        const { error } = await supabase.from("stock").upsert({
+          id: item.id,
+          product_name: item.nom,
+          quantity: item.quantite,
+          unit_price: item.prixUnitaire,
+          created_at: new Date().toISOString(),
+        })
+
+        if (error) {
+          console.error(`[v0] Error migrating stock item ${item.id}:`, error)
+        }
+      }
+    }
+
+    // Mark migration as completed
+    localStorage.setItem(migrationKey, "true")
+    console.log("[v0] Migration completed successfully!")
+  } catch (error) {
+    console.error("[v0] Error during migration:", error)
+  }
+}
+
 export default function Home() {
   const { username, logout, isAdmin, isAuthenticated, isLoading, showWelcome, setShowWelcome } = useAuth()
 
@@ -71,28 +209,100 @@ export default function Home() {
   const [showViewModal, setShowViewModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [qrCodeSvg, setQrCodeSvg] = useState<string>("")
+  const [isDataLoading, setIsDataLoading] = useState(true)
+  const [stock, setStock] = useState<{ id: string; nom: string; quantite: number; prixUnitaire: number }[]>([])
 
   const stockManager = StockManager.getInstance()
+  const supabase = createClient()
 
   useEffect(() => {
-    try {
-      const savedSales = localStorage.getItem("sales-data")
-      if (savedSales) {
-        setSales(JSON.parse(savedSales))
+    setIsDataLoading(true)
+    loadData(supabase, setSales, setStock, stockManager, setReports).finally(() => setIsDataLoading(false))
+  }, [supabase])
+
+  useEffect(() => {
+    let channel: any = null
+
+    const setupRealtimeSubscription = async () => {
+      try {
+        const { error } = await supabase.from("sales").select("id").limit(1)
+
+        if (!error) {
+          channel = supabase
+            .channel("sales-changes")
+            .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, (payload) => {
+              console.log("[v0] Sales change detected:", payload)
+              loadData(supabase, setSales, setStock, stockManager, setReports)
+            })
+            .on("postgres_changes", { event: "*", schema: "public", table: "stock" }, (payload) => {
+              console.log("[v0] Stock change detected:", payload)
+              loadData(supabase, setSales, setStock, stockManager, setReports)
+            })
+            .subscribe()
+        } else {
+          console.log("[v0] Tables not available, real-time subscriptions disabled")
+        }
+      } catch (error) {
+        console.log("[v0] Real-time subscriptions not available, using localStorage only")
       }
-    } catch (error) {
-      console.warn("LocalStorage not available:", error)
     }
 
-    try {
-      const savedReports = localStorage.getItem("reports-data")
-      if (savedReports) {
-        setReports(JSON.parse(savedReports))
+    setupRealtimeSubscription()
+
+    return () => {
+      if (channel) {
+        supabase.removeChannel(channel)
       }
-    } catch (error) {
-      console.warn("LocalStorage not available:", error)
     }
-  }, [])
+  }, [supabase])
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("sales-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, (payload) => {
+        console.log("[v0] Real-time update received:", payload)
+        if (payload.eventType === "INSERT") {
+          const newSale = {
+            id: payload.new.id,
+            dateVente: payload.new.created_at.split("T")[0],
+            telephoneClient: payload.new.client_phone || "",
+            telephoneClient2: "",
+            adresseLivraison: payload.new.client_address || "",
+            produits: payload.new.products || [],
+            livreur: "",
+            modePaiement: "LIQUIDE" as const,
+            modePaiement2: undefined,
+            createdAt: payload.new.created_at,
+            status: payload.new.status as any,
+            isValidated: payload.new.status === "active",
+          }
+          setSales((prev) => [newSale, ...prev.filter((s) => s.id !== newSale.id)])
+        } else if (payload.eventType === "UPDATE") {
+          const updatedSale = {
+            id: payload.new.id,
+            dateVente: payload.new.created_at.split("T")[0],
+            telephoneClient: payload.new.client_phone || "",
+            telephoneClient2: "",
+            adresseLivraison: payload.new.client_address || "",
+            produits: payload.new.products || [],
+            livreur: "",
+            modePaiement: "LIQUIDE" as const,
+            modePaiement2: undefined,
+            createdAt: payload.new.created_at,
+            status: payload.new.status as any,
+            isValidated: payload.new.status === "active",
+          }
+          setSales((prev) => prev.map((s) => (s.id === updatedSale.id ? updatedSale : s)))
+        } else if (payload.eventType === "DELETE") {
+          setSales((prev) => prev.filter((s) => s.id !== payload.old.id))
+        }
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [supabase])
 
   useEffect(() => {
     try {
@@ -130,14 +340,31 @@ export default function Home() {
     }
   }, [selectedReport, showReportPrint])
 
-  const addSale = (saleData: Omit<Sale, "id" | "createdAt">) => {
-    const newSale: Sale = {
-      ...saleData,
-      id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-      createdAt: new Date().toISOString(),
-      status: "active",
+  const addSale = async (saleData: Omit<Sale, "id" | "createdAt">) => {
+    try {
+      const { data, error } = await supabase
+        .from("sales")
+        .insert({
+          client_name: saleData.telephoneClient,
+          client_phone: saleData.telephoneClient,
+          client_address: saleData.adresseLivraison,
+          products: saleData.produits,
+          total_amount: saleData.produits.reduce((sum, p) => sum + p.quantite * p.prixUnitaire, 0),
+          status: "active",
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error("Error adding sale to Supabase:", error)
+        throw error
+      }
+
+      console.log("[v0] Sale added to Supabase successfully")
+    } catch (error) {
+      console.error("Error in addSale:", error)
+      throw error
     }
-    setSales((prev) => [newSale, ...prev])
   }
 
   const printSale = (sale: Sale) => {
@@ -159,9 +386,31 @@ export default function Home() {
           console.log(`[v0] Stock restauré pour ${produit.nom}: +${produit.quantite}`)
         }
       })
-    }
 
-    setSales((prev) => prev.filter((sale) => sale.id !== saleId))
+      try {
+        const { error: trashError } = await supabase.from("trash").insert({
+          item_type: "sale",
+          item_id: saleId,
+          item_data: saleToDelete,
+        })
+
+        if (trashError) {
+          console.error("Error adding to trash:", trashError)
+        }
+
+        const { error: updateError } = await supabase.from("sales").update({ status: "deleted" }).eq("id", saleId)
+
+        if (updateError) {
+          console.error("Error updating sale status:", updateError)
+          throw updateError
+        }
+
+        console.log("[v0] Sale deleted successfully")
+      } catch (error) {
+        console.error("Error in deleteSale:", error)
+        throw error
+      }
+    }
   }
 
   const cancelSale = async (saleId: string) => {
@@ -180,7 +429,19 @@ export default function Home() {
       })
     }
 
-    setSales((prev) => prev.map((sale) => (sale.id === saleId ? { ...sale, status: "cancelled" } : sale)))
+    try {
+      const { error } = await supabase.from("sales").update({ status: "cancelled" }).eq("id", saleId)
+
+      if (error) {
+        console.error("Error updating sale status:", error)
+        throw error
+      }
+
+      console.log("[v0] Sale cancelled successfully")
+    } catch (error) {
+      console.error("Error in cancelSale:", error)
+      throw error
+    }
   }
 
   const refundSale = async (saleId: string) => {
@@ -199,7 +460,19 @@ export default function Home() {
       })
     }
 
-    setSales((prev) => prev.map((sale) => (sale.id === saleId ? { ...sale, status: "refunded" } : sale)))
+    try {
+      const { error } = await supabase.from("sales").update({ status: "refunded" }).eq("id", saleId)
+
+      if (error) {
+        console.error("Error updating sale status:", error)
+        throw error
+      }
+
+      console.log("[v0] Sale refunded successfully")
+    } catch (error) {
+      console.error("Error in refundSale:", error)
+      throw error
+    }
   }
 
   const viewSale = (sale: Sale) => {
@@ -212,8 +485,31 @@ export default function Home() {
     setShowEditModal(true)
   }
 
-  const updateSale = (updatedSale: Sale) => {
-    setSales((prev) => prev.map((sale) => (sale.id === updatedSale.id ? updatedSale : sale)))
+  const updateSale = async (updatedSale: Sale) => {
+    try {
+      const { error } = await supabase
+        .from("sales")
+        .update({
+          client_name: updatedSale.telephoneClient,
+          client_phone: updatedSale.telephoneClient,
+          client_address: updatedSale.adresseLivraison,
+          products: updatedSale.produits,
+          total_amount: updatedSale.produits.reduce((sum, p) => sum + p.quantite * p.prixUnitaire, 0),
+          status: updatedSale.status,
+        })
+        .eq("id", updatedSale.id)
+
+      if (error) {
+        console.error("Error updating sale:", error)
+        throw error
+      }
+
+      console.log("[v0] Sale updated successfully")
+    } catch (error) {
+      console.error("Error in updateSale:", error)
+      throw error
+    }
+
     setShowEditModal(false)
     setSelectedSale(null)
   }
@@ -293,18 +589,59 @@ export default function Home() {
     setReports((prev) => prev.filter((report) => report.id !== reportId))
   }
 
-  const restoreSaleFromTrash = (sale: Sale) => {
-    setSales((prev) => [{ ...sale, status: "active" }, ...prev])
+  const restoreSaleFromTrash = async (sale: Sale) => {
+    try {
+      const { error } = await supabase.from("sales").update({ status: "active" }).eq("id", sale.id)
+
+      if (error) {
+        console.error("Error restoring sale:", error)
+        throw error
+      }
+
+      const { error: trashError } = await supabase.from("trash").delete().eq("item_id", sale.id)
+
+      if (trashError) {
+        console.error("Error removing from trash:", trashError)
+      }
+
+      console.log("[v0] Sale restored successfully")
+      setActiveTab("database")
+    } catch (error) {
+      console.error("Error in restoreSaleFromTrash:", error)
+      throw error
+    }
   }
 
   const validateSale = async (saleId: string) => {
-    setSales((prev) =>
-      prev.map((sale) => (sale.id === saleId ? { ...sale, isValidated: true, status: "active" } : sale)),
-    )
+    try {
+      const { error } = await supabase.from("sales").update({ status: "active" }).eq("id", saleId)
+
+      if (error) {
+        console.error("Error validating sale:", error)
+        throw error
+      }
+
+      console.log("[v0] Sale validated successfully")
+    } catch (error) {
+      console.error("Error in validateSale:", error)
+      throw error
+    }
   }
 
   const putSaleOnHold = async (saleId: string) => {
-    setSales((prev) => prev.map((sale) => (sale.id === saleId ? { ...sale, status: "pending" } : sale)))
+    try {
+      const { error } = await supabase.from("sales").update({ status: "pending" }).eq("id", saleId)
+
+      if (error) {
+        console.error("Error putting sale on hold:", error)
+        throw error
+      }
+
+      console.log("[v0] Sale put on hold successfully")
+    } catch (error) {
+      console.error("Error in putSaleOnHold:", error)
+      throw error
+    }
   }
 
   if (showReportPrint && selectedReport) {
@@ -577,12 +914,12 @@ export default function Home() {
     )
   }
 
-  if (isLoading) {
+  if (isLoading || isDataLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Chargement...</p>
+          <p className="text-gray-600">Chargement des données...</p>
         </div>
       </div>
     )
@@ -758,7 +1095,7 @@ export default function Home() {
                   <CardTitle>Gestion de Stock</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <StockManagement />
+                  <StockManagement stock={stock} />
                 </CardContent>
               </Card>
             </TabsContent>
